@@ -5,15 +5,34 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 import time
 
+"""
+currently grab rapid players usernames
+"""
+
+### config ###
+DEBUG = False
+###
+
 ### debug ###
 start_time = time.perf_counter()
 ### --- ###
 
-options = Options()
-options.add_argument("--headless=new")
 
-driver = webdriver.Chrome(options=options)
-driver.get("https://www.chess.com/leaderboard/live/rapid?country=PH&page=3")
+### variable declaration ###
+usernames = []
+page_local = 5
+### --- ###
+
+if DEBUG == True:
+    driver = webdriver.Chrome()     
+
+else: 
+    options = Options()
+    options.add_argument("--headless=new")
+
+    driver = webdriver.Chrome(options=options)
+
+driver.get(f"https://www.chess.com/leaderboard/live/rapid?country=PH&page={page_local}")
 
 wait = WebDriverWait(driver, 10)
 
@@ -24,11 +43,19 @@ elements = wait.until(
 elements = driver.find_elements(By.CLASS_NAME, "cc-user-block-username")
 
 for element in elements:
-    print(element.text)
+    usernames += [element.text]
+
+if DEBUG == True:
+    for element in elements:
+        print(element.text)
 
 driver.close()
 
+if DEBUG == True:
+    print(usernames)
+
 ### debug ###
-end_time = time.perf_counter()
-elapsed_time = end_time - start_time
-print(f"Elapsed time: {elapsed_time:.1f} seconds")
+if DEBUG == True:
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+    print(f"Elapsed time: {elapsed_time:.1f} seconds")
