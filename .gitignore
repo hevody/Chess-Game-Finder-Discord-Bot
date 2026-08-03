@@ -1,3 +1,4 @@
 tests/
 feature/*.html
 selenium_template
+databases/

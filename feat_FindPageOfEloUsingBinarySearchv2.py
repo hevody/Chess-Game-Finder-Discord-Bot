@@ -7,7 +7,6 @@ from selenium.webdriver.chrome.options import Options
 ### config ###
 DEBUG = False
 VERBOSE = True
-
 ### --- ###
 
 ### variable declaration ###
@@ -49,7 +48,7 @@ def open_leaderboard_page_retrieve_elo(page: int) -> list:           # returns e
   driver.get(f"https://www.chess.com/leaderboard/live/rapid?country=PH&page={page}")   
 
   ### wait ###
-  wait = WebDriverWait(driver, 30)                                   # bug fix: selenium.common.exceptions.TimeoutException, internet problem probably, before: ['1977', '1976']
+  wait = WebDriverWait(driver, 30)                                   
   elements = wait.until(
     EC.presence_of_all_elements_located((By.CLASS_NAME, "leaderboard-main-link"))
     )
@@ -88,7 +87,7 @@ def ELO_PAGE_binary_search(TARGET_elo_given: int, low_elo_range: bool, high_elo_
     midpoint = left + (right - left) // 2
     current_item = open_leaderboard_page_retrieve_elo(midpoint)
 
-    if str(TARGET_elo_given) in current_item:                      # bug fix
+    if str(TARGET_elo_given) in current_item:                      
       return midpoint                       
     if len(current_item) == 1 or high_elo_range == True:           # found a bug: (*) Found elo on the page: ['2101', '2100', '2099']
       current_item = int(current_item[0])
