@@ -6,18 +6,19 @@ from selenium.webdriver.chrome.options import Options
 import time
 
 ### config ###
-DEBUG = True
+DEBUG = False
 VERBOSE = True
 ### --- ###
 
 ### DEBUG: variable declaration ###
-page_start = 1          # suppose page = x: page_start = x, page_end = x + 1
-page_end = 21
+page_start = 5947          # suppose page = x: page_start = x, page_end = x + 1
+page_end = 7634
+page_end += 1 
 ###
 
 ### variable declaration ###
 all_fetched_usernames = []
-database_filename = ".\\databases\\" + "Top 1000 Filipino Rapid Players" + ".db"
+database_filename = ".\\databases\\" + "900-1000 Rapid CC Filipino usernames" + ".db"
 country = "PH"
 ### --- ###
 
@@ -53,9 +54,9 @@ def grabccusernames(country_local, page_local):
   for element in elements:
       usernames += [element.text]
 
-  if DEBUG == True:
+  if DEBUG == True or VERBOSE == True:
     for element in elements:
-      print(element.text)
+      print(f'[username found]: {element.text}')
 
   driver.close()
   return usernames
@@ -65,15 +66,25 @@ if __name__ == '__main__':
   for page in range(page_start, page_end):
     if VERBOSE == True:
       print(f'[*] Currently on page {page}')
-    fetched_usernames = grabccusernames(country, page)
+    while True:             # bug fix for: urllib3.exceptions.ReadTimeoutError: HTTPConnectionPool(host='localhost', port=10890): Read timed out. (read timeout=120)
+      try:
+        fetched_usernames = grabccusernames(country, page)
+        break
+      except KeyboardInterrupt:
+        break
+      except:
+        continue
     all_fetched_usernames += fetched_usernames
+    with open(f'{database_filename}_temp.array', 'w') as f:             # temporary save of the array into the database in case of timeout
+      f.write(str(all_fetched_usernames))       
+
   if VERBOSE == True:
     print(f'Saving into {database_filename}...')
   with open(database_filename, 'w') as f:         # saves inside a .db file
     for individual_username in all_fetched_usernames:
         f.write(f"{individual_username}\n")
   if VERBOSE == True:
-    print(f'Files saved into {database_filename}...')
+    print(f'Usernames saved into {database_filename}...')
 
   
 

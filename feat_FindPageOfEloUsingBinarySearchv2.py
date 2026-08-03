@@ -11,8 +11,8 @@ VERBOSE = True
 ### --- ###
 
 ### variable declaration ###
-low_elo = 2000
-high_elo = 2100
+low_elo = 2100
+high_elo = 2200
 ### --- ###
 
 def find_true_elo_page(general_page: int, is_low_elo: bool, is_high_elo: bool) -> int:
@@ -49,7 +49,7 @@ def open_leaderboard_page_retrieve_elo(page: int) -> list:           # returns e
   driver.get(f"https://www.chess.com/leaderboard/live/rapid?country=PH&page={page}")   
 
   ### wait ###
-  wait = WebDriverWait(driver, 10)
+  wait = WebDriverWait(driver, 30)                                   # bug fix: selenium.common.exceptions.TimeoutException, internet problem probably, before: ['1977', '1976']
   elements = wait.until(
     EC.presence_of_all_elements_located((By.CLASS_NAME, "leaderboard-main-link"))
     )
@@ -72,7 +72,7 @@ def open_leaderboard_page_retrieve_elo(page: int) -> list:           # returns e
   unique_elo_list = list(dict.fromkeys(multiple_elo_list))
 
   if DEBUG == True or VERBOSE == True:
-    print(f'(*) Found elo on the page: {unique_elo_list}')            
+    print(f'(*) Found elo on the page {page}: {unique_elo_list}')            
 
   driver.close()
   return unique_elo_list
@@ -87,22 +87,22 @@ def ELO_PAGE_binary_search(TARGET_elo_given: int, low_elo_range: bool, high_elo_
   while True:
     midpoint = left + (right - left) // 2
     current_item = open_leaderboard_page_retrieve_elo(midpoint)
-     
-    if len(current_item) == 1 or high_elo_range == True:      # found a bug: (*) Found elo on the page: ['2101', '2100', '2099']
+
+    if str(TARGET_elo_given) in current_item:                      # bug fix
+      return midpoint                       
+    if len(current_item) == 1 or high_elo_range == True:           # found a bug: (*) Found elo on the page: ['2101', '2100', '2099']
       current_item = int(current_item[0])
     elif low_elo_range == True:
       current_item = int(current_item[-1])
 
     if current_item == TARGET_elo_given:
       return midpoint
-
     if TARGET_elo_given > current_item:
       right = midpoint - 1
     else:
       left = midpoint + 1
 
-    ### reexamine for the bug ###
-    bug_fix = 'bug_fix'
+    
 
 if __name__ == '__main__':
   ### low elo ###
