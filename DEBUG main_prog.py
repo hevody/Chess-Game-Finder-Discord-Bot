@@ -8,14 +8,15 @@ import time
 ### config ###
 DEBUG = False
 VERBOSE = True
-### --- ###
-
-### variable declaration ###
-all_fetched_usernames = []
-database_filename = ".\\databases\\" + "900-1000 Rapid CC Filipino usernames" + ".db"
 country = "PH"
+database_filename = ""
 low_elo = 2100
 high_elo = 2200
+### --- ###
+
+### cconstant variable declaration ###
+all_fetched_usernames = []
+database_dir_filename = ".\\databases\\" + f"{database_filename}" + ".db"
 ### --- ###
 
 ### debug ###
@@ -169,8 +170,8 @@ if __name__ == '__main__':
   high_elo_true_page = find_true_elo_page(high_elo_general_page, False, True)
 
   if VERBOSE == True:
-    print(f'[*] true page of low elo: {low_elo_true_page}')
-    print(f'[*] true page of high elo: {high_elo_true_page}')
+    print(f'[FOUND] Real Chess.com page {low_elo}: {low_elo_true_page}')
+    print(f'[FOUND] Real Chess.com page of {high_elo}: {high_elo_true_page}')
 
   ###
 
@@ -188,16 +189,16 @@ if __name__ == '__main__':
       except:
         continue
     all_fetched_usernames += fetched_usernames
-    with open(f'{database_filename}_temp.array', 'w') as f:             # temporary save of the array into the database in case of timeout
+    with open(f'{database_dir_filename}_temp.array', 'w') as f:             # temporary save of the array into the database in case of timeout
       f.write(str(all_fetched_usernames))       
 
   if VERBOSE == True:
-    print(f'Saving into {database_filename}...')
-  with open(database_filename, 'w') as f:         # saves inside a .db file
+    print(f'Saving into {database_dir_filename}...')
+  with open(database_dir_filename, 'w') as f:         # saves inside a .db file
     for individual_username in all_fetched_usernames:
         f.write(f"{individual_username}\n")
   if VERBOSE == True:
-    print(f'Usernames saved into {database_filename}...')
+    print(f'Usernames saved into {database_dir_filename}...')
 
   
 
