@@ -13,11 +13,15 @@ import requests
 import re
 import chess
 import chess.pgn
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 ### --- ### 
 
 """
 revision 1
 """
+# make a caching database so that usernames that are not found will not be searched again once there is a rate-limit [requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))] 
+
 
 ### config ###
 DEBUG = True
@@ -26,7 +30,16 @@ database_filename = "pageOneToThree"
 country = "PH"
 LOAD_DATABASE = True
 TimeControl = 600
+session = requests.Session()
+retries = Retry(total=3,
+                backoff_factor=1,
+                status_forcelist=[500, 502, 503, 504],
+                )
+session.mount("https://", HTTPAdapter(max_retries=retries))
+session.mount("http://", HTTPAdapter(max_retries=retries))
 ### --- ###
+
+
 
 ### temporary variables ###
 high_elo_true_page = 1
@@ -44,6 +57,8 @@ HEADERS = {
     "Connection": "keep-alive"
 }
 fen_plain_patern = re.compile(r'[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*')
+with open('.\\cache\\cache_usernames.db') as f:
+   cache_usernames = f.read().split()
 ### --- ###
 
 ### debug ###
@@ -66,7 +81,7 @@ def validate_game_pgn_to_fen(index_g_u: int, given_fen: str) -> bool: # will ret
   with open('candidate.pgn', 'w', encoding='utf-8') as f:
     f.write(candidate_pgn_var)
 
-  candidate_pgn_var = open('candidate.pgn')
+  candidate_pgn_var = open('candidate.pgn', encoding='utf-8', errors='replace')
 
   possible_game = chess.pgn.read_game(candidate_pgn_var)
 
@@ -94,10 +109,16 @@ def validate_game_pgn_to_fen(index_g_u: int, given_fen: str) -> bool: # will ret
   return False
   
 def get_game_archive(g_a_url) -> list:
+  time.sleep(0.3)
   if DEBUG == True:
       print('[INSIDE] retrieve_game_archive_from_chesscom')
   while True:
-    response = requests.get(g_a_url, headers=HEADERS)
+    try:
+        response = session.get(g_a_url, headers=HEADERS, timeout=30)
+    except KeyboardInterrupt:
+       exit()
+    except:
+        continue
 
     if response.status_code == 200:
       response_json = response.json()
@@ -108,16 +129,26 @@ def get_game_archive(g_a_url) -> list:
       continue
 
 def cache_monthly_json(m_link: str) -> list:
+  time.sleep(0.3)
   while True:
-    response = requests.get(m_link, headers=HEADERS)
-    
+    try:
+        response = session.get(m_link, headers=HEADERS, timeout=30)
+    except KeyboardInterrupt:
+       exit()
+    except:
+       continue
+
     if response.status_code == 200:
+      try:
+        if response.json()['code'] == 0:
+            return []
+      except: pass
       response_json = response.json()
       return response_json['games']
     else:
       continue
 
-def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month: int) -> str:
+def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month: int) -> tuple[bool, str]:
   global monthly_list
   ### strip given_fen ###
   given_fen_match = fen_plain_patern.search(given_fen_unstripped)
@@ -126,7 +157,7 @@ def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month
   # challenge: username and given fen to game link
   game_archive = get_game_archive(f'https://api.chess.com/pub/player/{cc_username}/games/archives')
   if game_archive == []:
-    return '[This user does not exist]'
+    return (False, '[This user does not exist]')
   game_archive.reverse()  
 
   game_archive_depth_of_month = []
@@ -135,14 +166,16 @@ def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month
 
   for month_link in game_archive_depth_of_month:
     monthly_list = cache_monthly_json(m_link=month_link)
+    if monthly_list == []:
+       continue
     for game_index in range(len(monthly_list)):
       if DEBUG == True:
         print(game_index)
       game_found = validate_game_pgn_to_fen(game_index, given_fen=given_fen)
       if game_found:
         game_link = monthly_list[game_index]['url']
-        return game_link
-  return "[GAME NOT FOUND]"
+        return (True, game_link)
+  return (False, "[GAME NOT FOUND]")
 
 def perform_get_request(url: str) -> str:
     response = requests.get(url, headers=HEADERS)
@@ -215,19 +248,30 @@ def grabccusernames(country_local: str, page_local: int) -> list:
     driver.close()
     return usernames
 
-if __name__ == '__main__':
-    if LOAD_DATABASE == True:
+def main(mode: str) -> str:     # will return a link
+    if mode == 'LoadDatabase':
         usernames_list = load_username_database()
         for username in usernames_list:
+            if username in cache_usernames:
+               continue
+            with open('.\\cache\\cache_usernames.db', 'a') as f:
+               f.write(username + '\n')
             if DEBUG == True:
               print(f'Currently searching in user: {username}')
             if VERBOSE == True:
                chance_calculate = (usernames_list.index(username) / len(usernames_list)) * 100
-               print(f'Chance of finding the game: {chance_calculate}%') 
-            print(matchfen_to_link(cc_username=username, given_fen_unstripped=given_fen_user, depth_of_month=1))
-              
+               print(f'Chance of finding the game: {chance_calculate:.1f}%') 
+            found, message = matchfen_to_link(cc_username=username, given_fen_unstripped=given_fen_user, depth_of_month=1)
+            if found == False:
+               print(message)
+            if found == True:
+               return message
+
     #grab_usernames_randomly()
     #grab_usernames_sequentially()
+
+if __name__ == '__main__':
+    print(main('LoadDatabase'))
 
 ### debug ###
 if DEBUG == True or VERBOSE == True:

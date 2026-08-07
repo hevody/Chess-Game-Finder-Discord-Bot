@@ -12,3 +12,5 @@ does not work with bughouse
 
 MAJOR BUG: Rate limited 
 `requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))`
+
+made cache usernames database just in case we got rate limited

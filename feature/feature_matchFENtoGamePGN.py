@@ -83,7 +83,9 @@ def get_game_archive(g_a_url) -> list:
 def cache_monthly_json(m_link: str) -> list:
   while True:
     response = requests.get(m_link, headers=HEADERS)
-    
+
+    if response.json()['code'] == 0:
+      return []
     if response.status_code == 200:
       response_json = response.json()
       return response_json['games']
@@ -108,6 +110,8 @@ def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month
 
   for month_link in game_archive_depth_of_month:
     monthly_list = cache_monthly_json(m_link=month_link)
+    if monthly_list == []:
+      continue
     for game_index in range(len(monthly_list)):
       if DEBUG == True:
         print(game_index)
@@ -118,5 +122,5 @@ def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month
   return "[GAME NOT FOUND]"
 
 if __name__ == '__main__':
-  print(matchfen_to_link(cc_username='Lorenz_Julien_Tee', given_fen_unstripped=given_fen_user, depth_of_month=1))
+  print(matchfen_to_link(cc_username='jd-ex', given_fen_unstripped=given_fen_user, depth_of_month=1))
   
