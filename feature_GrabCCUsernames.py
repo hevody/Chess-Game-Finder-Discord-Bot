@@ -10,6 +10,9 @@ import random
 import os
 import json
 import requests
+import re
+import chess
+import chess.pgn
 ### --- ### 
 
 """
@@ -22,11 +25,13 @@ VERBOSE = True
 database_filename = "pageOneToThree"
 country = "PH"
 LOAD_DATABASE = True
+TimeControl = 600
 ### --- ###
 
 ### temporary variables ###
 high_elo_true_page = 1
 low_elo_true_page = 2
+given_fen_user = '8/7R/4k3/3p1b2/8/4P2P/2r3P1/6K1 w - - 1 31'
 ### --- ###
 
 ### constant variable declaration ###
@@ -34,14 +39,110 @@ all_fetched_usernames = []
 database_dir_filename = ".\\databases\\" + f"{database_filename}" + ".db"
 USER_AGENT = 'Mozlla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
 HEADERS = {
-  'User-Agent': USER_AGENT
+    "User-Agent": USER_AGENT,
+    "Accept": "application/json, text/plain, */*",
+    "Connection": "keep-alive"
 }
+fen_plain_patern = re.compile(r'[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*/[a-zA-Z0-9]*')
 ### --- ###
 
 ### debug ###
 if DEBUG == True or VERBOSE == True:
     start_time = time.perf_counter()
 ### --- ###
+
+### function variable ###
+monthly_list = []
+
+def validate_game_pgn_to_fen(index_g_u: int, given_fen: str) -> bool: # will return if the game was found or not
+  try:
+    candidate_pgn_var = monthly_list[index_g_u]['pgn']
+  except KeyboardInterrupt:
+    exit()
+  except:
+    return False
+
+  
+  with open('candidate.pgn', 'w', encoding='utf-8') as f:
+    f.write(candidate_pgn_var)
+
+  candidate_pgn_var = open('candidate.pgn')
+
+  possible_game = chess.pgn.read_game(candidate_pgn_var)
+
+  this_game_time_control = possible_game.headers['TimeControl']
+
+  if not this_game_time_control == str(TimeControl):
+    candidate_pgn_var.close()
+    os.remove('candidate.pgn')
+    return False
+
+  board = possible_game.board()
+  for move in possible_game.mainline_moves():
+    board.push(move)
+    candidate_fen_unstripped = board.fen()
+    candidate_fen_match = fen_plain_patern.search(candidate_fen_unstripped)
+    candidate_fen = candidate_fen_match.group()
+    if given_fen == candidate_fen:
+      if DEBUG == True:
+        print('[Match Found!]')
+      candidate_pgn_var.close()
+      os.remove('candidate.pgn')
+      return True
+  candidate_pgn_var.close()
+  os.remove('candidate.pgn')
+  return False
+  
+def get_game_archive(g_a_url) -> list:
+  if DEBUG == True:
+      print('[INSIDE] retrieve_game_archive_from_chesscom')
+  while True:
+    response = requests.get(g_a_url, headers=HEADERS)
+
+    if response.status_code == 200:
+      response_json = response.json()
+      return response_json['archives']
+    elif response.json()['code'] == 0:
+      return []
+    else:
+      continue
+
+def cache_monthly_json(m_link: str) -> list:
+  while True:
+    response = requests.get(m_link, headers=HEADERS)
+    
+    if response.status_code == 200:
+      response_json = response.json()
+      return response_json['games']
+    else:
+      continue
+
+def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month: int) -> str:
+  global monthly_list
+  ### strip given_fen ###
+  given_fen_match = fen_plain_patern.search(given_fen_unstripped)
+  given_fen = given_fen_match.group()
+
+  # challenge: username and given fen to game link
+  game_archive = get_game_archive(f'https://api.chess.com/pub/player/{cc_username}/games/archives')
+  if game_archive == []:
+    return '[This user does not exist]'
+  game_archive.reverse()  
+
+  game_archive_depth_of_month = []
+  for game_archive_month_index in range(depth_of_month):
+    game_archive_depth_of_month += [game_archive[game_archive_month_index]]
+
+  for month_link in game_archive_depth_of_month:
+    monthly_list = cache_monthly_json(m_link=month_link)
+    for game_index in range(len(monthly_list)):
+      if DEBUG == True:
+        print(game_index)
+      game_found = validate_game_pgn_to_fen(game_index, given_fen=given_fen)
+      if game_found:
+        game_link = monthly_list[game_index]['url']
+        return game_link
+  return "[GAME NOT FOUND]"
 
 def perform_get_request(url: str) -> str:
     response = requests.get(url, headers=HEADERS)
@@ -67,7 +168,8 @@ def load_username_database() -> list:       # will return a list with username t
         item_number += 1
         print(f'[{item_number}] {database}')
 
-    input_item_number = int(input('choose: ')) - 1
+    #input_item_number = int(input('choose: ')) - 1
+    input_item_number = 1                   # TEMPORARY WILL REMOVE
     if databases[input_item_number] in json_database: 
         usernames_chronological_text = perform_get_request(json_database[databases[input_item_number]])
         usernames_list = usernames_chronological_text.split()
@@ -113,11 +215,17 @@ def grabccusernames(country_local: str, page_local: int) -> list:
     driver.close()
     return usernames
 
-
-
 if __name__ == '__main__':
     if LOAD_DATABASE == True:
-        print(load_username_database())
+        usernames_list = load_username_database()
+        for username in usernames_list:
+            if DEBUG == True:
+              print(f'Currently searching in user: {username}')
+            if VERBOSE == True:
+               chance_calculate = (usernames_list.index(username) / len(usernames_list)) * 100
+               print(f'Chance of finding the game: {chance_calculate}%') 
+            print(matchfen_to_link(cc_username=username, given_fen_unstripped=given_fen_user, depth_of_month=1))
+              
     #grab_usernames_randomly()
     #grab_usernames_sequentially()
 
