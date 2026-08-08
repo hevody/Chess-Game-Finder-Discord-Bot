@@ -14,3 +14,6 @@ MAJOR BUG: Rate limited
 `requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))`
 
 made cache usernames database just in case we got rate limited
+
+you can also use the  `./cache/cache_usernames.db`, just move it into the databases and rename it
+for example, `cache_username.db` to `1500-1600 PH Range Usernames.db`
