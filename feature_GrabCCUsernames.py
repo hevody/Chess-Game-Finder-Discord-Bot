@@ -24,7 +24,7 @@ revision 1
 
 
 ### config ###
-DEBUG = True
+DEBUG = False
 VERBOSE = True
 database_filename = "pageOneToThree"
 country = "PH"

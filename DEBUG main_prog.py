@@ -5,13 +5,33 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 import time
 
+### migration ###
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 ### config ###
-DEBUG = False
+DEBUG = True
 VERBOSE = True
 country = "PH"
 database_filename = ""
-low_elo = 2100
-high_elo = 2200
+low_elo = 1500
+high_elo = 1600
+session = requests.Session()
+retries = Retry(total=3,
+                backoff_factor=1,
+                status_forcelist=[500, 502, 503, 504],
+                )
+session.mount("https://", HTTPAdapter(max_retries=retries))
+session.mount("http://", HTTPAdapter(max_retries=retries))
+USER_AGENT = 'Mozlla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "application/json, text/plain, */*",
+    "Connection": "keep-alive"
+}
+country = 'PH'
+gameMode = 'rapid'
 ### --- ###
 
 ### cconstant variable declaration ###
@@ -24,6 +44,33 @@ if DEBUG == True or VERBOSE == True:
   start_time = time.perf_counter()
 ### --- ###
 
+def open_leaderboard_page_retrieve_elo_REQUESTS(page: int) -> list: # returns elo list, much faster with API calls
+  time.sleep(0.3)
+  while True:
+    try:
+        response = session.get(f'https://www.chess.com/callback/leaderboard/live/{gameMode}?country={country}&gameType=live&page={page}&totalPage=10000', headers=HEADERS, timeout=30)
+    except KeyboardInterrupt:
+        exit()
+    except:
+        continue
+
+    if response.status_code == 200:
+      leaderboard_json = response.json()
+      break
+    else:
+      continue
+
+  elo_list = []
+  for player_index in range(len(leaderboard_json['leaders'])):
+    elo_list += [int(leaderboard_json['leaders'][player_index]['score'])]
+
+  unique_elo_list = list(dict.fromkeys(elo_list))
+
+  if VERBOSE == True:
+    print(f'Found elo on the page {page}: {unique_elo_list}')
+
+  return unique_elo_list
+
 def find_true_elo_page(general_page: int, is_low_elo: bool, is_high_elo: bool) -> int:
   if is_low_elo == True:
     elo_to_find = low_elo - 1
@@ -32,57 +79,13 @@ def find_true_elo_page(general_page: int, is_low_elo: bool, is_high_elo: bool) -
 
   pagination = general_page
   while True:
-    list_of_elo_in_page = open_leaderboard_page_retrieve_elo(pagination)
-    if str(elo_to_find) in list_of_elo_in_page:
+    list_of_elo_in_page = open_leaderboard_page_retrieve_elo_REQUESTS(pagination)
+    if elo_to_find in list_of_elo_in_page:
       return pagination
     elif is_low_elo == True:
       pagination += 1
     elif is_high_elo == True:
       pagination -= 1
-
-def open_leaderboard_page_retrieve_elo(page: int) -> list:           # returns elo list
-  ### variable declaration ###
-  eloindexes = [x for x in range(3, 350, 7)]
-
-  ### starts chrome driver ###
-  if DEBUG == True:
-    driver = webdriver.Chrome()
-  else:
-    options = Options()
-    options.add_argument("--headless=new")
-    driver = webdriver.Chrome(options=options)
-  ### --- ###
-
-  driver.get(f"https://www.chess.com/leaderboard/live/rapid?country=PH&page={page}")   
-
-  ### wait ###
-  wait = WebDriverWait(driver, 30)                                   
-  elements = wait.until(
-    EC.presence_of_all_elements_located((By.CLASS_NAME, "leaderboard-main-link"))
-    )
-  ### --- ###
-
-  elements = driver.find_elements(By.CLASS_NAME, "leaderboard-main-link")
-
-  
-
-  contains_elo_array = [x.text for x in elements]
-
-  
-  multiple_elo_list = []
-  for index in eloindexes:          # buggy
-    try: 
-      multiple_elo_list += [contains_elo_array[index]]
-    except:
-      break
-
-  unique_elo_list = list(dict.fromkeys(multiple_elo_list))
-
-  if DEBUG == True or VERBOSE == True:
-    print(f'(*) Found elo on the page {page}: {unique_elo_list}')            
-
-  driver.close()
-  return unique_elo_list
 
 def ELO_PAGE_binary_search(TARGET_elo_given: int, low_elo_range: bool, high_elo_range: bool) -> int:           # returns the specific page (index)
   ### variable declaration ###
@@ -92,7 +95,7 @@ def ELO_PAGE_binary_search(TARGET_elo_given: int, low_elo_range: bool, high_elo_
 
   while True:
     midpoint = left + (right - left) // 2
-    current_item = open_leaderboard_page_retrieve_elo(midpoint)
+    current_item = open_leaderboard_page_retrieve_elo_REQUESTS(midpoint)
 
     if str(TARGET_elo_given) in current_item:                      
       return midpoint                       
@@ -151,7 +154,7 @@ if __name__ == '__main__':
   low_elo_general_page = ELO_PAGE_binary_search(low_elo, True, False)
   if DEBUG == True or VERBOSE == True:
     print(f'[*] Found the General Chess.com Page for {low_elo}: {low_elo_general_page}')
-
+  
   ### find true page low elo ###      # there will be 2 cases, ex. 1400 and 1399 co-exist in the page; 1400 and 1399 are on the separate page
   if VERBOSE == True:
     print(f'[*] Searching for the Real Chess.com Page of {low_elo}')         
@@ -174,7 +177,7 @@ if __name__ == '__main__':
     print(f'[FOUND] Real Chess.com page of {high_elo}: {high_elo_true_page}')
 
   ###
-
+  input()
 
   ### section 2: contains grabbing usernames and saving those usernames inside a .db file (in ./databases/) ###
   for page in range(high_elo_true_page, low_elo_true_page + 1):
@@ -200,7 +203,6 @@ if __name__ == '__main__':
   if VERBOSE == True:
     print(f'Usernames saved into {database_dir_filename}...')
 
-  
 
 ### debug ###
 if DEBUG == True or VERBOSE == True:
