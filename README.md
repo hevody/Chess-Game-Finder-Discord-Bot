@@ -20,3 +20,5 @@ for example, `cache_username.db` to `1500-1600 PH Range Usernames.db`
 
 I would suggest to make a local database first, then run this program
 rather than using it in real-time
+
+will integrate discord functionality
