@@ -1,11 +1,3 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-import time
-
-### new dependencies ### 
 import random
 import os
 import json
@@ -15,6 +7,7 @@ import chess
 import chess.pgn
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import time
 ### --- ### 
 
 """
@@ -24,11 +17,10 @@ revision 1
 
 
 ### config ###
-DEBUG = False
+DEBUG = True
 VERBOSE = True
-database_filename = "pageOneToThree"
+database_filename = ""    # add the filename
 country = "PH"
-LOAD_DATABASE = True
 TimeControl = 600
 session = requests.Session()
 retries = Retry(total=3,
@@ -37,14 +29,15 @@ retries = Retry(total=3,
                 )
 session.mount("https://", HTTPAdapter(max_retries=retries))
 session.mount("http://", HTTPAdapter(max_retries=retries))
+gameMode = 'rapid'
 ### --- ###
 
 
 
 ### temporary variables ###
-high_elo_true_page = 1
-low_elo_true_page = 2
-given_fen_user = '8/7R/4k3/3p1b2/8/4P2P/2r3P1/6K1 w - - 1 31'
+given_fen_user = '8/8/5k2/6p1/4K1Bp/7P/8/8 b - - 1 52'
+low_elo = 1500
+high_elo = 1530
 ### --- ###
 
 ### constant variable declaration ###
@@ -68,6 +61,98 @@ if DEBUG == True or VERBOSE == True:
 
 ### function variable ###
 monthly_list = []
+
+def grabCCusernames_REQUESTS(page_local: int) -> list:  # will return a list of usernames from that page
+  time.sleep(0.3)
+  while True:
+    try:
+      response = session.get(f'https://www.chess.com/callback/leaderboard/live/{gameMode}?country={country}&gameType=live&page={page_local}&totalPage=10000', headers=HEADERS, timeout=30)
+    except KeyboardInterrupt:
+      exit()
+    except:
+      continue
+  
+    if response.status_code == 200:
+      leaderboard_json = response.json()
+      break
+    else:
+      continue
+  
+  username_list = []
+  for player_index in range(len(leaderboard_json['leaders'])):
+    username_list += [(leaderboard_json['leaders'][player_index]['user']['username'])]
+    
+  if VERBOSE == True:
+    print(f'Found usernames on page {page_local}: {username_list}')
+
+  return username_list
+
+def open_leaderboard_page_retrieve_elo_REQUESTS(page: int) -> list: # returns elo list, much faster with API calls
+  time.sleep(0.3)
+  while True:
+    try:
+        response = session.get(f'https://www.chess.com/callback/leaderboard/live/{gameMode}?country={country}&gameType=live&page={page}&totalPage=10000', headers=HEADERS, timeout=30)
+    except KeyboardInterrupt:
+        exit()
+    except:
+        continue
+
+    if response.status_code == 200:
+      leaderboard_json = response.json()
+      break
+    else:
+      continue
+
+  elo_list = []
+  for player_index in range(len(leaderboard_json['leaders'])):
+    elo_list += [int(leaderboard_json['leaders'][player_index]['score'])]
+
+  unique_elo_list = list(dict.fromkeys(elo_list))
+
+  if VERBOSE == True:
+    print(f'Found elo on the page {page}: {unique_elo_list}')
+
+  return unique_elo_list
+
+def find_true_elo_page(general_page: int, is_low_elo: bool, is_high_elo: bool) -> int:
+  if is_low_elo == True:
+    elo_to_find = low_elo - 1
+  if is_high_elo == True:
+    elo_to_find = high_elo + 1
+
+  pagination = general_page
+  while True:
+    list_of_elo_in_page = open_leaderboard_page_retrieve_elo_REQUESTS(pagination)
+    if elo_to_find in list_of_elo_in_page:
+      return pagination
+    elif is_low_elo == True:
+      pagination += 1
+    elif is_high_elo == True:
+      pagination -= 1
+
+def ELO_PAGE_binary_search(TARGET_elo_given: int, low_elo_range: bool, high_elo_range: bool) -> int:           # returns the specific page (index)
+  ### variable declaration ###
+  left = 1              # the pages (index)
+  right = 10_000        # the pages (index)
+  ### --- ###
+
+  while True:
+    midpoint = left + (right - left) // 2
+    current_item = open_leaderboard_page_retrieve_elo_REQUESTS(midpoint)
+
+    if str(TARGET_elo_given) in current_item:                      
+      return midpoint                       
+    if len(current_item) == 1 or high_elo_range == True:           
+      current_item = int(current_item[0])
+    elif low_elo_range == True:
+      current_item = int(current_item[-1])
+
+    if current_item == TARGET_elo_given:
+      return midpoint
+    if TARGET_elo_given > current_item:
+      right = midpoint - 1
+    else:
+      left = midpoint + 1
 
 def validate_game_pgn_to_fen(index_g_u: int, given_fen: str) -> bool: # will return if the game was found or not
   try:
@@ -215,39 +300,6 @@ def load_username_database() -> list:       # will return a list with username t
     random.shuffle(local_database_username_list)
     return local_database_username_list
 
-def grabccusernames(country_local: str, page_local: int) -> list:
-    ### variable declaration ###
-    usernames = []
-    ### --- ###
-
-    if DEBUG == True:
-        driver = webdriver.Chrome()     
-
-    else: 
-        options = Options()
-        options.add_argument("--headless=new")
-
-        driver = webdriver.Chrome(options=options)
-
-    driver.get(f"https://www.chess.com/leaderboard/live/rapid?country={country_local}&page={page_local}")
-
-    wait = WebDriverWait(driver, 10)
-    elements = wait.until(
-        EC.presence_of_all_elements_located((By.CLASS_NAME, "cc-user-block-username"))
-    )
-
-    elements = driver.find_elements(By.CLASS_NAME, "cc-user-block-username")
-
-    for element in elements:
-        usernames += [element.text]
-
-    if DEBUG == True or VERBOSE == True:
-        for element in elements:
-            print(f'[username found] {element.text}')
-
-    driver.close()
-    return usernames
-
 def main(mode: str) -> str:     # will return a link
     if mode == 'LoadDatabase':
         usernames_list = load_username_database()
@@ -267,11 +319,69 @@ def main(mode: str) -> str:     # will return a link
             if found == True:
                return message
 
-    #grab_usernames_randomly()
-    #grab_usernames_sequentially()
+    ### performs a binary search ========================================
+    
+    ### low elo ###
+    if VERBOSE == True:
+      print(f'[*] Searching for the General Chess.com Page of {low_elo}')
+    low_elo_general_page = ELO_PAGE_binary_search(low_elo, True, False)
+    
+    if DEBUG == True or VERBOSE == True:
+      print(f'[*] Found the General Chess.com Page for {low_elo}: {low_elo_general_page}')
+    
+    ### find true page low elo ###      # there will be 2 cases, ex. 1400 and 1399 co-exist in the page; 1400 and 1399 are on the separate page
+    if VERBOSE == True:
+      print(f'[*] Searching for the Real Chess.com Page of {low_elo}')         
+    low_elo_true_page = find_true_elo_page(low_elo_general_page, True, False)
+  
+    ### high elo ###
+    if VERBOSE == True:
+        print(f'[*] Searching for the General Chess.com Page of {high_elo}')
+    high_elo_general_page = ELO_PAGE_binary_search(high_elo, False, True)
+    if DEBUG == True or VERBOSE == True:
+      print(f'[*] Found the General Chess.com Page for {high_elo}: {high_elo_general_page}')
+  
+    ### find true page high elo ###
+    if VERBOSE == True:
+        print(f'[*] Searching for the Real Chess.com Page of {high_elo}')    
+    high_elo_true_page = find_true_elo_page(high_elo_general_page, False, True)
+  
+    if VERBOSE == True:
+      print(f'[FOUND] Real Chess.com page {low_elo}: {low_elo_true_page}')
+      print(f'[FOUND] Real Chess.com page of {high_elo}: {high_elo_true_page}')    
+
+    pages_that_contain_range_usernames = [x for x in range(high_elo_true_page, low_elo_true_page+1)]
+  
+    if mode == 'GrabRandomly':
+      random.shuffle(pages_that_contain_range_usernames)
+
+    for page in pages_that_contain_range_usernames:
+      if VERBOSE == True:
+        chance_calculate = (pages_that_contain_range_usernames.index(page) / len(pages_that_contain_range_usernames)) * 100
+        print(f'Chance of finding the game: {chance_calculate:.1f}%') 
+      usernames_in_page = grabCCusernames_REQUESTS(page_local=page)
+      for username in usernames_in_page:
+         if username == 'hevocity':
+            print('start the debug!')
+            input()
+         if username in cache_usernames:
+            continue
+         with open('.\\cache\\cache_usernames.db', 'a') as f:
+            f.write(username + '\n')
+         if DEBUG == True:
+            print(f'Currently searching in user: {username}')
+         found, message = matchfen_to_link(cc_username=username, given_fen_unstripped=given_fen_user, depth_of_month=1)
+         if found == False:
+            print(message)
+         if found == True:
+            return message 
+         
+
+    
 
 if __name__ == '__main__':
-    print(main('LoadDatabase'))
+  print(main('GrabRandomly'))
+    
 
 ### debug ###
 if DEBUG == True or VERBOSE == True:

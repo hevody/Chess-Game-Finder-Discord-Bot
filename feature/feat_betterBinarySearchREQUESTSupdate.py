@@ -30,7 +30,6 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "Connection": "keep-alive"
 }
-country = 'PH'
 gameMode = 'rapid'
 ### --- ###
 
