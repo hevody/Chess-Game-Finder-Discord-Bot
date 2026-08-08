@@ -6,7 +6,7 @@ constraints:
 The code currently supports Filipino players only for simplicity, it can easily be fixed in the following versions
 also only discover rapid games but can easily be fixed in the future updates
 
-plan: port to termux, so the bot can run even on mobile (port the program using beautiful soup)
+plan: port to termux, so the bot can run even on mobile (port the program using `requests`)
 
 does not work with bughouse
 
