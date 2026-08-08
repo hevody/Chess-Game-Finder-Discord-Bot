@@ -17,3 +17,6 @@ made cache usernames database just in case we got rate limited
 
 you can also use the  `./cache/cache_usernames.db`, just move it into the databases and rename it
 for example, `cache_username.db` to `1500-1600 PH Range Usernames.db`
+
+I would suggest to make a local database first, then run this program
+rather than using it in real-time
