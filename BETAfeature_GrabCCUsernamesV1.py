@@ -30,6 +30,7 @@ logging.basicConfig(
 ### config ###
 DEBUG = False
 VERBOSE = False
+THREADING_DEBUG = True
 database_filename = ""    # add the filename
 country = "PH"
 TimeControl = 600
@@ -167,7 +168,8 @@ def ELO_PAGE_binary_search(TARGET_elo_given: int, low_elo_range: bool, high_elo_
 
 def validate_game_pgn_to_fen(index_g_u: int, given_fen: str, username: str) -> bool: # will return if the game was found or not
   try:
-    candidate_pgn_var = monthly_list[index_g_u]['pgn']
+    with lock:
+      candidate_pgn_var = monthly_list[index_g_u]['pgn']
   except KeyboardInterrupt:
     exit()
   except:
@@ -253,11 +255,11 @@ def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month
   if stop_event.is_set():
      return None
   ### strip given_fen ###
-  given_fen_match = fen_plain_patern.search(given_fen_unstripped)     # FIX THIS!
+  given_fen_match = fen_plain_patern.search(given_fen_unstripped)      
   given_fen = given_fen_match.group()
 
   # challenge: username and given fen to game link
-  game_archive = get_game_archive(f'https://api.chess.com/pub/player/{cc_username}/games/archives')
+  game_archive = get_game_archive(f'https://api.chess.com/pub/player/{cc_username}/games/archives') # dict, mut
 
   if cc_username == 'hevocity':
      print(game_archive)
@@ -266,12 +268,15 @@ def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month
     return (False, '[This user does not exist]')
   game_archive.reverse()  
 
-  game_archive_depth_of_month = []
+  game_archive_depth_of_month = []    # list, mut
   for game_archive_month_index in range(depth_of_month):
     game_archive_depth_of_month += [game_archive[game_archive_month_index]]
 
   for month_link in game_archive_depth_of_month:
-    monthly_list = cache_monthly_json(m_link=month_link)
+    monthly_list = cache_monthly_json(m_link=month_link)    # dict, mut, LOCKED
+
+    with lock:
+       monthly_list = monthly_list
 
     if cc_username == 'hevocity':
        print(monthly_list)
@@ -316,13 +321,13 @@ def load_username_database() -> list:       # will return a list with username t
     if databases[input_item_number] in json_database: 
         usernames_chronological_text = perform_get_request(json_database[databases[input_item_number]])
         usernames_list = usernames_chronological_text.split()
-        random.shuffle(usernames_list)
+        random.shuffle(usernames_list)     
         return usernames_list
 
     with open(f'.\\databases\\{databases[input_item_number]}') as f:
         local_database_username_list = f.read().split()
 
-    random.shuffle(local_database_username_list)
+    random.shuffle(local_database_username_list)   
     return local_database_username_list
 
 def main(mode: str) -> str:     # will return a link
@@ -403,6 +408,7 @@ def main(mode: str) -> str:     # will return a link
          
 
 stop_event = threading.Event()
+lock = threading.Lock()
 
 def beta_test():
   #main(mode='GrabRandomly')
@@ -412,29 +418,36 @@ def beta_test():
   with ThreadPoolExecutor(max_workers=5) as executor:
    future_to_url =  {executor.submit(matchfen_to_link, username, given_fen_user, 1): username for username in usernames_list}
    for future in concurrent.futures.as_completed(future_to_url):
+      try:
+         result = future.result()
+      except Exception as e:
+         print(f"Thread crashed with error: {e}")
       url = future_to_url[future]
-      logging.info(future.result())
-      logging.info(url)
-      logging.info(usernames_list.index(url))
-
-      print(future.result())  # return of function   
-      print(url)              # username
-      print(usernames_list.index(url))    # index
-      if future.result()[0] == True:
+      if THREADING_DEBUG == True:
+        logging.info(future.result())
         logging.info(url)
-        logging.info(future.result()[1])
-        print(url)
-        print(future.result()[1])
+        logging.info(usernames_list.index(url))
+
+        print(future.result())  # return of function   
+        print(url)              # username
+        print(usernames_list.index(url))    # index
+      if future.result()[0] == True:
+        if THREADING_DEBUG == True:
+          logging.info(url)
+          logging.info(future.result()[1])
+          print(url)
+          print(future.result()[1])
         stop_event.set()
-        executor.shutdown(wait=False, cancel_futures=True)
+        executor.shutdown(wait=True, cancel_futures=True)
         return(future.result()[1])
-        exit()
-      #print(future_to_url)
+  return 'Game Not Found'  
 
 # I need to have designated temp files for the thread pool  
 
 if __name__ == '__main__':
-   print(beta_test())
+  print(beta_test())
+  print('This code ran!!!!!')
+
 
 ### debug ###
 if DEBUG == True or VERBOSE == True:

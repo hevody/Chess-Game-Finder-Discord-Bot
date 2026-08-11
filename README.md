@@ -22,3 +22,5 @@ I would suggest to make a local database first, then run this program
 rather than using it in real-time
 
 will integrate discord functionality
+
+I edited given_fen
