@@ -252,14 +252,20 @@ def cache_monthly_json(m_link: str) -> list:
 def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month: int) -> tuple[bool, str]:
   global monthly_list
 
+  if not stop_event.is_set():
+    print(f'ID: {cc_username} is running...')
+  
   if stop_event.is_set():
-     return None
+     return (False, "[GAME NOT FOUND]")
   ### strip given_fen ###
   given_fen_match = fen_plain_patern.search(given_fen_unstripped)      
   given_fen = given_fen_match.group()
 
   # challenge: username and given fen to game link
   game_archive = get_game_archive(f'https://api.chess.com/pub/player/{cc_username}/games/archives') # dict, mut
+
+  with lock:
+    game_archive = game_archive
 
   if cc_username == 'hevocity':
      print(game_archive)
@@ -268,7 +274,8 @@ def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month
     return (False, '[This user does not exist]')
   game_archive.reverse()  
 
-  game_archive_depth_of_month = []    # list, mut
+  with lock:
+    game_archive_depth_of_month = []    # list, mut
   for game_archive_month_index in range(depth_of_month):
     game_archive_depth_of_month += [game_archive[game_archive_month_index]]
 
@@ -290,6 +297,8 @@ def matchfen_to_link(cc_username: str, given_fen_unstripped: str, depth_of_month
       if game_found:
         game_link = monthly_list[game_index]['url']
         return (True, game_link)
+
+  print(f'ID: {cc_username} exits gracefully')
   return (False, "[GAME NOT FOUND]")
 
 def perform_get_request(url: str) -> str:
@@ -419,7 +428,7 @@ def beta_test():
    future_to_url =  {executor.submit(matchfen_to_link, username, given_fen_user, 1): username for username in usernames_list}
    for future in concurrent.futures.as_completed(future_to_url):
       try:
-         result = future.result()
+         result = future.result(timeout=90)
       except Exception as e:
          print(f"Thread crashed with error: {e}")
       url = future_to_url[future]
